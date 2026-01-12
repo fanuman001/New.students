@@ -1,70 +1,143 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-TW">
 <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Billiard Glide 遊戲說明</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Billiard Glide 模擬器</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        .pool-table {
-            background: #065f46;
-            border: 10px solid #78350f;
-            position: relative;
-            height: 200px;
-            border-radius: 20px;
-        }
-        .ball {
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            position: absolute;
-            transition: all 1s ease-out;
-        }
+        body { margin: 0; overflow: hidden; background: #1a1a1a; touch-action: none; }
+        #canvas-container { width: 100vw; height: 60vh; position: relative; }
+        .stats { font-family: sans-serif; }
     </style>
 </head>
-<body class="bg-slate-900 text-white p-4">
-    <h1 class="text-2xl font-bold text-center text-yellow-500 mb-4">BILLIARD GLIDE</h1>
-    
-    <div class="pool-table mb-4" id="table">
-        <div class="absolute left-1/4 h-full w-0.5 bg-white/30"></div>
-        <div class="absolute right-0 h-full w-2 bg-yellow-600/50"></div>
-        <div id="demoBall" class="ball bg-red-500 shadow-lg" style="left: 10%; top: 45%;"></div>
+<body class="flex flex-col items-center">
+
+    <div class="w-full bg-slate-800 p-4 text-center shadow-lg">
+        <h1 class="text-xl font-bold text-yellow-500">Billiard Glide 戰術模擬器</h1>
+        <p class="text-xs text-slate-300">拖曳紅球模擬推球 | 目標：最接近右側黃線</p>
     </div>
 
-    <div class="bg-slate-800 p-4 rounded-lg shadow-lg">
-        <h2 id="stepTitle" class="text-xl font-bold text-yellow-400">點擊下方按鈕看流程</h2>
-        <p id="stepDesc" class="text-slate-300 mt-2">這是一個適合朋友聚會的手推撞球遊戲。</p>
-    </div>
+    <div id="canvas-container" class="bg-green-900 border-y-8 border-amber-900"></div>
 
-    <div class="grid grid-cols-2 gap-2 mt-4">
-        <button onclick="playStep(1)" class="bg-blue-600 p-2 rounded text-sm">1. 擺球規則</button>
-        <button onclick="playStep(2)" class="bg-blue-600 p-2 rounded text-sm">2. 擊球得分</button>
-        <button onclick="playStep(3)" class="bg-blue-600 p-2 rounded text-sm">3. 終局結算</button>
-        <button onclick="playStep(0)" class="bg-slate-600 p-2 rounded text-sm">重置</button>
+    <div class="flex-1 w-full bg-slate-900 p-4 stats text-white overflow-y-auto">
+        <div id="winner-display" class="bg-blue-900/50 p-3 rounded-lg border border-blue-400 mb-3 text-center">
+            正在偵測最接近底邊的球...
+        </div>
+        
+        <div class="grid grid-cols-2 gap-2 text-sm">
+            <div class="bg-slate-800 p-2 rounded">
+                <span class="text-red-400 font-bold">● A隊 (實色)</span>
+                <p class="text-[10px]">進球: +25 | 底部: +75</p>
+            </div>
+            <div class="bg-slate-800 p-2 rounded">
+                <span class="text-blue-400 font-bold">● B隊 (條紋)</span>
+                <p class="text-[10px]">黑/母球進洞: +50 / +100</p>
+            </div>
+        </div>
+
+        <button onclick="resetGame()" class="w-full mt-4 bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-2 rounded-full transition shadow-lg">
+            重置場景
+        </button>
     </div>
 
     <script>
-        function playStep(s) {
-            const ball = document.getElementById('demoBall');
-            const title = document.getElementById('stepTitle');
-            const desc = document.getElementById('stepDesc');
-            
-            if(s === 1) {
-                title.innerText = "1. 後攻擺球";
-                desc.innerText = "後攻方將黑球與母球放在底部的『腳顆星區』。";
-                ball.style.left = "85%"; ball.style.top = "45%"; ball.style.backgroundColor = "black";
-            } else if(s === 2) {
-                title.innerText = "2. 擊球得分";
-                desc.innerText = "從左側發球線推球！擊落對方球 +25，黑/母球 +50。";
-                ball.style.left = "90%"; ball.style.top = "-20px"; // 模擬進洞
-                ball.style.backgroundColor = "red";
-            } else if(s === 3) {
-                title.innerText = "3. 底部加分";
-                desc.innerText = "最後誰的球最靠近右側底邊，該隊伍 +75 分！";
-                ball.style.left = "92%"; ball.style.top = "45%"; ball.style.backgroundColor = "blue";
-            } else {
-                ball.style.left = "10%"; ball.style.top = "45%"; ball.style.backgroundColor = "red";
+        const { Engine, Render, Runner, Bodies, Composite, Mouse, MouseConstraint, Events, Vector } = Matter;
+
+        // 初始化物理引擎
+        const engine = Engine.create();
+        engine.gravity.y = 0; // 俯視圖不需要重力
+
+        const container = document.getElementById('canvas-container');
+        const render = Render.create({
+            element: container,
+            engine: engine,
+            options: {
+                width: container.clientWidth,
+                height: container.clientHeight,
+                wireframes: false,
+                background: '#065f46'
             }
+        });
+
+        // 建立牆壁 (撞球桌邊)
+        const wallOptions = { isStatic: true, render: { fillStyle: '#78350f' } };
+        const ground = Bodies.rectangle(render.options.width/2, render.options.height + 10, render.options.width, 40, wallOptions);
+        const ceiling = Bodies.rectangle(render.options.width/2, -10, render.options.width, 40, wallOptions);
+        const leftWall = Bodies.rectangle(-10, render.options.height/2, 40, render.options.height, wallOptions);
+        const rightWall = Bodies.rectangle(render.options.width + 10, render.options.height/2, 40, render.options.height, wallOptions);
+
+        // 建立腳顆星底線標記
+        const goalLine = render.options.width - 20;
+
+        let balls = [];
+
+        function createBall(x, y, color, label) {
+            const ball = Bodies.circle(x, y, 12, {
+                restitution: 0.8, // 彈性
+                frictionAir: 0.03, // 空氣阻力(模擬桌面摩擦)
+                render: { fillStyle: color }
+            });
+            ball.label = label;
+            return ball;
         }
+
+        function resetGame() {
+            Composite.clear(engine.world);
+            balls = [];
+            
+            // 加入牆壁
+            Composite.add(engine.world, [ground, ceiling, leftWall, rightWall]);
+
+            // 加入球員球 (示範用)
+            const ballA = createBall(100, render.options.height/2 - 30, '#ef4444', 'A隊');
+            const ballB = createBall(100, render.options.height/2 + 30, '#3b82f6', 'B隊');
+            const blackBall = createBall(render.options.width - 60, render.options.height/2, '#000000', '黑球');
+            const whiteBall = createBall(render.options.width - 60, render.options.height/2 - 50, '#ffffff', '母球');
+
+            balls = [ballA, ballB, blackBall, whiteBall];
+            Composite.add(engine.world, balls);
+        }
+
+        // 滑鼠/觸控控制
+        const mouse = Mouse.create(render.canvas);
+        const mouseConstraint = MouseConstraint.create(engine, {
+            mouse: mouse,
+            constraint: { stiffness: 0.2, render: { visible: true } }
+        });
+        Composite.add(engine.world, mouseConstraint);
+
+        // 偵測誰最靠近底邊
+        Events.on(engine, 'afterUpdate', function() {
+            let closestDist = Infinity;
+            let closestBall = null;
+
+            balls.forEach(ball => {
+                const dist = Math.abs(ball.position.x - goalLine);
+                if (dist < closestDist) {
+                    closestDist = dist;
+                    closestBall = ball.label;
+                }
+            });
+
+            if (closestBall) {
+                document.getElementById('winner-display').innerText = 
+                    `當前底部加分領先：${closestBall}`;
+            }
+        });
+
+        Render.run(render);
+        const runner = Runner.create();
+        Runner.run(runner, engine);
+
+        resetGame();
+
+        // 處理手機縮放
+        window.addEventListener('resize', () => {
+            render.canvas.width = container.clientWidth;
+            render.canvas.height = container.clientHeight;
+        });
     </script>
 </body>
 </html>

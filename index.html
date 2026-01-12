@@ -3,47 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Billiard Glide 專業模擬器</title>
+    <title>Billiard Glide 縱向戰術版</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { margin: 0; overflow: hidden; background: #0f172a; touch-action: none; position: fixed; width: 100%; height: 100%; font-family: sans-serif; }
-        #canvas-container { width: 100vw; height: 55vh; position: relative; border-top: 10px solid #451a03; border-bottom: 10px solid #451a03; }
+        body { margin: 0; overflow: hidden; background: #070a13; touch-action: none; position: fixed; width: 100%; height: 100%; font-family: sans-serif; }
+        #canvas-container { width: 100vw; height: 75vh; position: relative; }
     </style>
 </head>
 <body class="flex flex-col items-center">
 
-    <div class="w-full bg-slate-900 p-3 text-center">
-        <h1 class="text-xl font-black text-emerald-400 tracking-widest">BILLIARD GLIDE</h1>
-        <p class="text-[10px] text-slate-400 uppercase">Tactical Simulation Pro</p>
+    <div class="w-full bg-slate-900 p-2 text-center border-b border-emerald-500/30">
+        <h1 class="text-lg font-black text-emerald-400">BILLIARD GLIDE</h1>
+        <div id="turn-indicator" class="text-xs py-1 px-4 rounded-full bg-red-600 inline-block mt-1 font-bold">輪到 A 隊 (紅)</div>
     </div>
 
-    <div id="canvas-container" class="bg-emerald-800"></div>
+    <div id="canvas-container"></div>
 
-    <div class="flex-1 w-full bg-slate-900 p-4 text-white shadow-2xl">
-        <div id="status" class="bg-emerald-900/50 border border-emerald-500 p-2 rounded text-center text-sm mb-4 font-mono">
-            等待擊球...
+    <div class="flex-1 w-full bg-slate-900 p-3 grid grid-cols-2 gap-2 border-t-4 border-amber-900">
+        <div id="score-board" class="text-[10px] text-slate-400 space-y-1">
+            <p>● 進對方球: +25 | 黑/母: +50</p>
+            <p>● 頂端黃色區最靠近者: +75</p>
         </div>
-
-        <div class="grid grid-cols-2 gap-3 mb-6">
-            <div class="bg-slate-800 p-2 rounded text-xs">
-                <p class="text-red-400 font-bold mb-1">進對方球: +25</p>
-                <p class="text-slate-400">進黑/母球: +50 / +100</p>
-            </div>
-            <div class="bg-slate-800 p-2 rounded text-xs">
-                <p class="text-yellow-400 font-bold mb-1">最靠近底邊: +75</p>
-                <p class="text-slate-400">進自己球: 0 分</p>
-            </div>
-        </div>
-
-        <button onclick="location.reload()" class="w-full bg-emerald-600 active:bg-emerald-700 py-3 rounded-xl font-bold transition-all shadow-lg text-white">
-            重新開局
-        </button>
+        <button onclick="location.reload()" class="bg-emerald-700 text-white rounded-lg font-bold text-sm active:scale-95 transition-all">重置模擬</button>
     </div>
 
     <script>
         const { Engine, Render, Runner, Bodies, Composite, Events, Vector, Body } = Matter;
-
         const engine = Engine.create();
         engine.gravity.y = 0;
 
@@ -52,51 +38,61 @@
         const H = container.clientHeight;
 
         const render = Render.create({
-            element: container,
-            engine: engine,
-            options: {
-                width: W,
-                height: H,
-                wireframes: false,
-                background: 'transparent'
+            element: container, engine: engine,
+            options: { width: W, height: H, wireframes: false, background: 'transparent' }
+        });
+
+        // 遊戲狀態
+        let currentTurn = 'A隊'; // A隊先
+        let isMoving = false;
+        let lastPos = null; // 紀錄上一動位置
+
+        // 桌邊與球洞定義
+        const pocketR = 25;
+        const pockets = [
+            {x: 0, y: 0}, {x: W, y: 0}, {x: 0, y: H/2}, 
+            {x: W, y: H/2}, {x: 0, y: H}, {x: W, y: H}
+        ];
+
+        // 繪製背景與線路
+        Events.on(render, 'beforeRender', (event) => {
+            const ctx = render.context;
+            ctx.fillStyle = '#065f46'; // 桌布
+            ctx.fillRect(0, 0, W, H);
+
+            // 頂部加分區 (腳顆星)
+            ctx.fillStyle = 'rgba(251, 191, 36, 0.2)';
+            ctx.fillRect(0, 0, W, 60);
+
+            // 發球線 (底部 1/4)
+            ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath(); ctx.moveTo(0, H * 0.75); ctx.lineTo(W, H * 0.75); ctx.stroke();
+            ctx.setLineDash([]);
+
+            // 繪製球洞
+            ctx.fillStyle = '#000';
+            pockets.forEach(p => {
+                ctx.beginPath(); ctx.arc(p.x, p.y, pocketR, 0, Math.PI*2); ctx.fill();
+            });
+
+            // 繪製上一動殘影
+            if (lastPos) {
+                ctx.beginPath(); ctx.arc(lastPos.x, lastPos.y, 14, 0, Math.PI*2);
+                ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.stroke();
+            }
+
+            // 繪製預計線路
+            if (dragBall && startPt && currentMouse) {
+                ctx.beginPath(); ctx.moveTo(dragBall.position.x, dragBall.position.y);
+                const diff = Vector.sub(startPt, currentMouse);
+                const endPos = Vector.add(dragBall.position, Vector.mult(diff, 5));
+                ctx.lineTo(endPos.x, endPos.y);
+                ctx.strokeStyle = 'rgba(255,255,0,0.5)'; ctx.lineWidth = 2; ctx.stroke();
             }
         });
 
-        // 自定義繪製背景 (球桌細節)
-        Events.on(render, 'beforeRender', function() {
-            const ctx = render.context;
-            // 繪製桌布
-            ctx.fillStyle = '#065f46';
-            ctx.fillRect(0, 0, W, H);
-            
-            // 繪製發球線 (Head String)
-            ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-            ctx.setLineDash([5, 5]);
-            ctx.beginPath();
-            ctx.moveTo(W * 0.25, 0);
-            ctx.lineTo(W * 0.25, H);
-            ctx.stroke();
-            ctx.setLineDash([]);
-
-            // 繪製腳顆星底線標記 (右側目標區)
-            ctx.fillStyle = 'rgba(251, 191, 36, 0.2)';
-            ctx.fillRect(W - 40, 0, 40, H);
-
-            // 繪製六個口袋
-            ctx.fillStyle = '#111';
-            const pocketR = 20;
-            const pockets = [
-                {x: 0, y: 0}, {x: W/2, y: 0}, {x: W, y: 0},
-                {x: 0, y: H}, {x: W/2, y: H}, {x: W, y: H}
-            ];
-            pockets.forEach(p => {
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, pocketR, 0, Math.PI * 2);
-                ctx.fill();
-            });
-        });
-
-        // 桌邊碰撞體
+        // 物理牆壁 (隱形)
         const wallOpt = { isStatic: true, render: { visible: false } };
         Composite.add(engine.world, [
             Bodies.rectangle(W/2, -10, W, 20, wallOpt),
@@ -105,38 +101,46 @@
             Bodies.rectangle(W+10, H/2, 20, H, wallOpt)
         ]);
 
-        // 建立球
         function createBall(x, y, color, label, stroke = '#fff') {
-            return Bodies.circle(x, y, 12, {
-                restitution: 0.7,
-                frictionAir: 0.03,
+            return Bodies.circle(x, y, 14, {
+                restitution: 0.6, frictionAir: 0.04,
                 render: { fillStyle: color, strokeStyle: stroke, lineWidth: 3 },
                 label: label
             });
         }
 
         let ballList = [
-            createBall(W * 0.15, H/2 - 30, '#ef4444', 'A隊'),
-            createBall(W * 0.15, H/2 + 30, '#3b82f6', 'B隊'),
-            createBall(W * 0.8, H/2, '#111', '黑球', '#fbbf24'),
-            createBall(W * 0.8, H/2 - 50, '#f8fafc', '母球', '#94a3b8')
+            createBall(W/2 - 30, H - 60, '#ef4444', 'A隊'),
+            createBall(W/2 + 30, H - 60, '#3b82f6', 'B隊'),
+            createBall(W/2, 120, '#111', '黑球', '#fbbf24'),
+            createBall(W/2, 160, '#f8fafc', '母球', '#94a3b8')
         ];
         Composite.add(engine.world, ballList);
 
-        // 觸控互動邏輯
-        let dragBall = null, startPt = null;
+        let dragBall = null, startPt = null, currentMouse = null;
 
         container.addEventListener('touchstart', (e) => {
+            if (isMoving) return;
             const t = e.touches[0];
             const rect = container.getBoundingClientRect();
             const pt = { x: t.clientX - rect.left, y: t.clientY - rect.top };
             
             ballList.forEach(b => {
-                if (Vector.magnitude(Vector.sub(b.position, pt)) < 25) {
-                    dragBall = b;
-                    startPt = pt;
+                if (Vector.magnitude(Vector.sub(b.position, pt)) < 30) {
+                    if (b.label === currentTurn) { // 限制回合
+                        dragBall = b; startPt = pt; currentMouse = pt;
+                    } else if (b.label !== '黑球' && b.label !== '母球') {
+                        alert("現在是 " + currentTurn + " 的回合！");
+                    }
                 }
             });
+        });
+
+        container.addEventListener('touchmove', (e) => {
+            if (!dragBall) return;
+            const t = e.touches[0];
+            const rect = container.getBoundingClientRect();
+            currentMouse = { x: t.clientX - rect.left, y: t.clientY - rect.top };
         });
 
         container.addEventListener('touchend', (e) => {
@@ -145,40 +149,40 @@
             const rect = container.getBoundingClientRect();
             const endPt = { x: t.clientX - rect.left, y: t.clientY - rect.top };
             
+            lastPos = { x: dragBall.position.x, y: dragBall.position.y }; // 紀錄殘影
             const force = Vector.sub(startPt, endPt);
-            Body.applyForce(dragBall, dragBall.position, Vector.mult(force, 0.00005 * dragBall.mass));
-            dragBall = null;
+            Body.applyForce(dragBall, dragBall.position, Vector.mult(force, 0.00007 * dragBall.mass));
+            
+            dragBall = null; startPt = null; currentMouse = null;
+            isMoving = true;
+            
+            // 等待球停止後切換回合
+            checkStop();
         });
 
-        // 遊戲循環：偵測進洞與最近距離
-        Events.on(engine, 'afterUpdate', () => {
-            let closest = { name: '無', dist: Infinity };
-            const pockets = [{x: 0, y: 0}, {x: W/2, y: 0}, {x: W, y: 0}, {x: 0, y: H}, {x: W/2, y: H}, {x: W, y: H}];
+        function checkStop() {
+            const check = setInterval(() => {
+                const stillMoving = ballList.some(b => b.speed > 0.1);
+                if (!stillMoving) {
+                    isMoving = false;
+                    currentTurn = (currentTurn === 'A隊') ? 'B隊' : 'A隊';
+                    const indicator = document.getElementById('turn-indicator');
+                    indicator.innerText = `輪到 ${currentTurn}`;
+                    indicator.className = `text-xs py-1 px-4 rounded-full inline-block mt-1 font-bold ${currentTurn === 'A隊' ? 'bg-red-600' : 'bg-blue-600'}`;
+                    clearInterval(check);
+                }
+            }, 500);
+        }
 
+        Events.on(engine, 'afterUpdate', () => {
             ballList.forEach((b, idx) => {
-                // 1. 偵測進洞 (距離口袋小於 20)
                 pockets.forEach(p => {
-                    if (Vector.magnitude(Vector.sub(b.position, p)) < 22) {
-                        // 這裡可以加入加分邏輯
-                        document.getElementById('status').innerText = `💥 ${b.label} 進洞了！`;
+                    if (Vector.magnitude(Vector.sub(b.position, p)) < 25) {
                         Composite.remove(engine.world, b);
                         ballList.splice(idx, 1);
                     }
                 });
-
-                // 2. 偵測最近底邊 (右邊)
-                const d = Math.abs(b.position.x - W);
-                if (d < closest.dist) {
-                    closest = { name: b.label, dist: d };
-                }
             });
-
-            if (ballList.length > 0) {
-                const statusLine = document.getElementById('status');
-                if (!statusLine.innerText.includes('進洞')) {
-                    statusLine.innerText = `🎯 領先：${closest.name} (+75分)`;
-                }
-            }
         });
 
         Render.run(render);

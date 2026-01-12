@@ -3,141 +3,187 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Billiard Glide 模擬器</title>
+    <title>Billiard Glide 專業模擬器</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { margin: 0; overflow: hidden; background: #1a1a1a; touch-action: none; }
-        #canvas-container { width: 100vw; height: 60vh; position: relative; }
-        .stats { font-family: sans-serif; }
+        body { margin: 0; overflow: hidden; background: #0f172a; touch-action: none; position: fixed; width: 100%; height: 100%; font-family: sans-serif; }
+        #canvas-container { width: 100vw; height: 55vh; position: relative; border-top: 10px solid #451a03; border-bottom: 10px solid #451a03; }
     </style>
 </head>
 <body class="flex flex-col items-center">
 
-    <div class="w-full bg-slate-800 p-4 text-center shadow-lg">
-        <h1 class="text-xl font-bold text-yellow-500">Billiard Glide 戰術模擬器</h1>
-        <p class="text-xs text-slate-300">拖曳紅球模擬推球 | 目標：最接近右側黃線</p>
+    <div class="w-full bg-slate-900 p-3 text-center">
+        <h1 class="text-xl font-black text-emerald-400 tracking-widest">BILLIARD GLIDE</h1>
+        <p class="text-[10px] text-slate-400 uppercase">Tactical Simulation Pro</p>
     </div>
 
-    <div id="canvas-container" class="bg-green-900 border-y-8 border-amber-900"></div>
+    <div id="canvas-container" class="bg-emerald-800"></div>
 
-    <div class="flex-1 w-full bg-slate-900 p-4 stats text-white overflow-y-auto">
-        <div id="winner-display" class="bg-blue-900/50 p-3 rounded-lg border border-blue-400 mb-3 text-center">
-            正在偵測最接近底邊的球...
-        </div>
-        
-        <div class="grid grid-cols-2 gap-2 text-sm">
-            <div class="bg-slate-800 p-2 rounded">
-                <span class="text-red-400 font-bold">● A隊 (實色)</span>
-                <p class="text-[10px]">進球: +25 | 底部: +75</p>
-            </div>
-            <div class="bg-slate-800 p-2 rounded">
-                <span class="text-blue-400 font-bold">● B隊 (條紋)</span>
-                <p class="text-[10px]">黑/母球進洞: +50 / +100</p>
-            </div>
+    <div class="flex-1 w-full bg-slate-900 p-4 text-white shadow-2xl">
+        <div id="status" class="bg-emerald-900/50 border border-emerald-500 p-2 rounded text-center text-sm mb-4 font-mono">
+            等待擊球...
         </div>
 
-        <button onclick="resetGame()" class="w-full mt-4 bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-2 rounded-full transition shadow-lg">
-            重置場景
+        <div class="grid grid-cols-2 gap-3 mb-6">
+            <div class="bg-slate-800 p-2 rounded text-xs">
+                <p class="text-red-400 font-bold mb-1">進對方球: +25</p>
+                <p class="text-slate-400">進黑/母球: +50 / +100</p>
+            </div>
+            <div class="bg-slate-800 p-2 rounded text-xs">
+                <p class="text-yellow-400 font-bold mb-1">最靠近底邊: +75</p>
+                <p class="text-slate-400">進自己球: 0 分</p>
+            </div>
+        </div>
+
+        <button onclick="location.reload()" class="w-full bg-emerald-600 active:bg-emerald-700 py-3 rounded-xl font-bold transition-all shadow-lg text-white">
+            重新開局
         </button>
     </div>
 
     <script>
-        const { Engine, Render, Runner, Bodies, Composite, Mouse, MouseConstraint, Events, Vector } = Matter;
+        const { Engine, Render, Runner, Bodies, Composite, Events, Vector, Body } = Matter;
 
-        // 初始化物理引擎
         const engine = Engine.create();
-        engine.gravity.y = 0; // 俯視圖不需要重力
+        engine.gravity.y = 0;
 
         const container = document.getElementById('canvas-container');
+        const W = container.clientWidth;
+        const H = container.clientHeight;
+
         const render = Render.create({
             element: container,
             engine: engine,
             options: {
-                width: container.clientWidth,
-                height: container.clientHeight,
+                width: W,
+                height: H,
                 wireframes: false,
-                background: '#065f46'
+                background: 'transparent'
             }
         });
 
-        // 建立牆壁 (撞球桌邊)
-        const wallOptions = { isStatic: true, render: { fillStyle: '#78350f' } };
-        const ground = Bodies.rectangle(render.options.width/2, render.options.height + 10, render.options.width, 40, wallOptions);
-        const ceiling = Bodies.rectangle(render.options.width/2, -10, render.options.width, 40, wallOptions);
-        const leftWall = Bodies.rectangle(-10, render.options.height/2, 40, render.options.height, wallOptions);
-        const rightWall = Bodies.rectangle(render.options.width + 10, render.options.height/2, 40, render.options.height, wallOptions);
-
-        // 建立腳顆星底線標記
-        const goalLine = render.options.width - 20;
-
-        let balls = [];
-
-        function createBall(x, y, color, label) {
-            const ball = Bodies.circle(x, y, 12, {
-                restitution: 0.8, // 彈性
-                frictionAir: 0.03, // 空氣阻力(模擬桌面摩擦)
-                render: { fillStyle: color }
-            });
-            ball.label = label;
-            return ball;
-        }
-
-        function resetGame() {
-            Composite.clear(engine.world);
-            balls = [];
+        // 自定義繪製背景 (球桌細節)
+        Events.on(render, 'beforeRender', function() {
+            const ctx = render.context;
+            // 繪製桌布
+            ctx.fillStyle = '#065f46';
+            ctx.fillRect(0, 0, W, H);
             
-            // 加入牆壁
-            Composite.add(engine.world, [ground, ceiling, leftWall, rightWall]);
+            // 繪製發球線 (Head String)
+            ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.moveTo(W * 0.25, 0);
+            ctx.lineTo(W * 0.25, H);
+            ctx.stroke();
+            ctx.setLineDash([]);
 
-            // 加入球員球 (示範用)
-            const ballA = createBall(100, render.options.height/2 - 30, '#ef4444', 'A隊');
-            const ballB = createBall(100, render.options.height/2 + 30, '#3b82f6', 'B隊');
-            const blackBall = createBall(render.options.width - 60, render.options.height/2, '#000000', '黑球');
-            const whiteBall = createBall(render.options.width - 60, render.options.height/2 - 50, '#ffffff', '母球');
+            // 繪製腳顆星底線標記 (右側目標區)
+            ctx.fillStyle = 'rgba(251, 191, 36, 0.2)';
+            ctx.fillRect(W - 40, 0, 40, H);
 
-            balls = [ballA, ballB, blackBall, whiteBall];
-            Composite.add(engine.world, balls);
+            // 繪製六個口袋
+            ctx.fillStyle = '#111';
+            const pocketR = 20;
+            const pockets = [
+                {x: 0, y: 0}, {x: W/2, y: 0}, {x: W, y: 0},
+                {x: 0, y: H}, {x: W/2, y: H}, {x: W, y: H}
+            ];
+            pockets.forEach(p => {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, pocketR, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        });
+
+        // 桌邊碰撞體
+        const wallOpt = { isStatic: true, render: { visible: false } };
+        Composite.add(engine.world, [
+            Bodies.rectangle(W/2, -10, W, 20, wallOpt),
+            Bodies.rectangle(W/2, H+10, W, 20, wallOpt),
+            Bodies.rectangle(-10, H/2, 20, H, wallOpt),
+            Bodies.rectangle(W+10, H/2, 20, H, wallOpt)
+        ]);
+
+        // 建立球
+        function createBall(x, y, color, label, stroke = '#fff') {
+            return Bodies.circle(x, y, 12, {
+                restitution: 0.7,
+                frictionAir: 0.03,
+                render: { fillStyle: color, strokeStyle: stroke, lineWidth: 3 },
+                label: label
+            });
         }
 
-        // 滑鼠/觸控控制
-        const mouse = Mouse.create(render.canvas);
-        const mouseConstraint = MouseConstraint.create(engine, {
-            mouse: mouse,
-            constraint: { stiffness: 0.2, render: { visible: true } }
+        let ballList = [
+            createBall(W * 0.15, H/2 - 30, '#ef4444', 'A隊'),
+            createBall(W * 0.15, H/2 + 30, '#3b82f6', 'B隊'),
+            createBall(W * 0.8, H/2, '#111', '黑球', '#fbbf24'),
+            createBall(W * 0.8, H/2 - 50, '#f8fafc', '母球', '#94a3b8')
+        ];
+        Composite.add(engine.world, ballList);
+
+        // 觸控互動邏輯
+        let dragBall = null, startPt = null;
+
+        container.addEventListener('touchstart', (e) => {
+            const t = e.touches[0];
+            const rect = container.getBoundingClientRect();
+            const pt = { x: t.clientX - rect.left, y: t.clientY - rect.top };
+            
+            ballList.forEach(b => {
+                if (Vector.magnitude(Vector.sub(b.position, pt)) < 25) {
+                    dragBall = b;
+                    startPt = pt;
+                }
+            });
         });
-        Composite.add(engine.world, mouseConstraint);
 
-        // 偵測誰最靠近底邊
-        Events.on(engine, 'afterUpdate', function() {
-            let closestDist = Infinity;
-            let closestBall = null;
+        container.addEventListener('touchend', (e) => {
+            if (!dragBall) return;
+            const t = e.changedTouches[0];
+            const rect = container.getBoundingClientRect();
+            const endPt = { x: t.clientX - rect.left, y: t.clientY - rect.top };
+            
+            const force = Vector.sub(startPt, endPt);
+            Body.applyForce(dragBall, dragBall.position, Vector.mult(force, 0.00005 * dragBall.mass));
+            dragBall = null;
+        });
 
-            balls.forEach(ball => {
-                const dist = Math.abs(ball.position.x - goalLine);
-                if (dist < closestDist) {
-                    closestDist = dist;
-                    closestBall = ball.label;
+        // 遊戲循環：偵測進洞與最近距離
+        Events.on(engine, 'afterUpdate', () => {
+            let closest = { name: '無', dist: Infinity };
+            const pockets = [{x: 0, y: 0}, {x: W/2, y: 0}, {x: W, y: 0}, {x: 0, y: H}, {x: W/2, y: H}, {x: W, y: H}];
+
+            ballList.forEach((b, idx) => {
+                // 1. 偵測進洞 (距離口袋小於 20)
+                pockets.forEach(p => {
+                    if (Vector.magnitude(Vector.sub(b.position, p)) < 22) {
+                        // 這裡可以加入加分邏輯
+                        document.getElementById('status').innerText = `💥 ${b.label} 進洞了！`;
+                        Composite.remove(engine.world, b);
+                        ballList.splice(idx, 1);
+                    }
+                });
+
+                // 2. 偵測最近底邊 (右邊)
+                const d = Math.abs(b.position.x - W);
+                if (d < closest.dist) {
+                    closest = { name: b.label, dist: d };
                 }
             });
 
-            if (closestBall) {
-                document.getElementById('winner-display').innerText = 
-                    `當前底部加分領先：${closestBall}`;
+            if (ballList.length > 0) {
+                const statusLine = document.getElementById('status');
+                if (!statusLine.innerText.includes('進洞')) {
+                    statusLine.innerText = `🎯 領先：${closest.name} (+75分)`;
+                }
             }
         });
 
         Render.run(render);
-        const runner = Runner.create();
-        Runner.run(runner, engine);
-
-        resetGame();
-
-        // 處理手機縮放
-        window.addEventListener('resize', () => {
-            render.canvas.width = container.clientWidth;
-            render.canvas.height = container.clientHeight;
-        });
+        Runner.run(Runner.create(), engine);
     </script>
 </body>
 </html>
+

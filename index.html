@@ -3,20 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Grand Master Billiards v15.2</title>
+    <title>Grand Master Billiards v15.2 - Full Version</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;900&display=swap');
+        
         body { margin: 0; background: #020617; color: #f8fafc; position: fixed; width: 100%; height: 100%; overflow: hidden; font-family: 'system-ui'; }
         #app { display: flex; flex-direction: column; height: 100%; }
+        
         #table-wrapper { flex: 1; display: flex; justify-content: center; align-items: center; background: radial-gradient(circle, #0f172a 0%, #020617 100%); position: relative; padding: 20px; }
         #canvas-container { position: relative; border: 14px solid #451a03; border-radius: 30px; box-shadow: 0 0 100px rgba(0,0,0,0.8), inset 0 0 40px rgba(0,0,0,0.5); overflow: visible; background: #064e3b; }
-        .team-box { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); padding: 15px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1); transition: all 0.4s; }
-        .active-turn { border-color: #10b981 !important; transform: scale(1.05); background: rgba(16, 185, 129, 0.1); }
+        
+        .team-box { 
+            background: rgba(30, 41, 59, 0.7); 
+            backdrop-filter: blur(10px);
+            padding: 15px; border-radius: 20px; 
+            border: 1px solid rgba(255,255,255,0.1);
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .active-turn { 
+            border-color: #10b981 !important; 
+            transform: scale(1.05);
+            box-shadow: 0 10px 25px rgba(16,185,129,0.2);
+            background: rgba(16, 185, 129, 0.1);
+        }
         .pocket-hole { position: absolute; background: #000; border-radius: 50%; z-index: 1; box-shadow: inset 0 8px 15px rgba(0,0,0,0.9); border: 2px solid #27272a; }
+        
         #power-meter { position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%); width: 240px; height: 12px; background: rgba(15, 23, 42, 0.8); border-radius: 20px; border: 2px solid rgba(255,255,255,0.1); overflow: hidden; display: none; z-index: 100; }
-        #power-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #10b981, #fbbf24, #f43f5e); }
+        #power-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #10b981, #fbbf24, #f43f5e); box-shadow: 0 0 15px #f43f5e; }
+        
         .font-game { font-family: 'Orbitron', sans-serif; }
     </style>
 </head>
@@ -24,16 +40,22 @@
 
 <div id="app">
     <div id="config-ui" class="absolute inset-0 bg-slate-950/98 z-[3000] flex items-center justify-center backdrop-blur-2xl">
-        <div class="bg-slate-900/50 p-10 rounded-[3rem] border border-emerald-500/20 w-96 text-center shadow-2xl">
-            <h1 class="text-4xl font-black text-emerald-400 mb-2 font-game italic">ULTIMATE</h1>
-            <p class="text-[10px] text-emerald-500/50 mb-8 tracking-[0.3em]">STRATEGIC BILLIARDS</p>
+        <div class="bg-slate-900/50 p-10 rounded-[3rem] border border-emerald-500/20 w-96 shadow-2xl text-center">
+            <h1 class="text-4xl font-black text-emerald-400 mb-2 font-game italic tracking-tighter">ULTIMATE</h1>
+            <p class="text-xs text-emerald-500/50 mb-8 tracking-[0.3em]">STRATEGIC BILLIARDS</p>
+            
             <div class="space-y-4 mb-10">
                 <div class="bg-slate-800/50 p-4 rounded-2xl border border-white/5">
-                    <label class="text-[10px] text-slate-400 font-bold uppercase block mb-2">每局發球數</label>
+                    <label class="text-[10px] text-slate-400 font-bold uppercase block mb-2">每回合發球數</label>
                     <input type="number" id="ball-qty" value="5" class="bg-transparent text-white text-3xl font-game w-full text-center focus:outline-none">
                 </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <button id="toggle-guide" onclick="this.classList.toggle('bg-emerald-600'); this.classList.toggle('bg-slate-800'); window.showGuide = !window.showGuide;" class="bg-emerald-600 p-3 rounded-xl text-[10px] font-bold uppercase transition-all">瞄準線: ON</button>
+                    <button id="toggle-power" onclick="this.classList.toggle('bg-emerald-600'); this.classList.toggle('bg-slate-800'); window.showPower = !window.showPower;" class="bg-emerald-600 p-3 rounded-xl text-[10px] font-bold uppercase transition-all">力道條: ON</button>
+                </div>
             </div>
-            <button id="start-btn" class="w-full bg-emerald-600 py-5 rounded-2xl font-game text-xl font-black shadow-lg">START MATCH</button>
+            
+            <button id="start-btn" class="w-full bg-gradient-to-r from-emerald-600 to-teal-500 py-5 rounded-2xl font-game text-xl font-black shadow-[0_0_30px_rgba(16,185,129,0.4)] active:scale-95 transition-all">START MATCH</button>
         </div>
     </div>
 
@@ -41,21 +63,23 @@
         <div class="text-center">
             <h2 class="text-3xl font-game mb-12 text-white">DECIDE FIRST STRIKE</h2>
             <div class="flex gap-6">
-                <button onclick="playRPS('rock')" class="bg-slate-800 w-24 h-24 rounded-3xl text-4xl hover:bg-emerald-600 transition-all">✊</button>
-                <button onclick="playRPS('paper')" class="bg-slate-800 w-24 h-24 rounded-3xl text-4xl hover:bg-emerald-600 transition-all">✋</button>
-                <button onclick="playRPS('scissors')" class="bg-slate-800 w-24 h-24 rounded-3xl text-4xl hover:bg-emerald-600 transition-all">✌️</button>
+                <button onclick="playRPS('rock')" class="bg-slate-800 w-24 h-24 rounded-3xl text-4xl hover:bg-emerald-600 hover:scale-110 transition-all border border-white/10">✊</button>
+                <button onclick="playRPS('paper')" class="bg-slate-800 w-24 h-24 rounded-3xl text-4xl hover:bg-emerald-600 hover:scale-110 transition-all border border-white/10">✋</button>
+                <button onclick="playRPS('scissors')" class="bg-slate-800 w-24 h-24 rounded-3xl text-4xl hover:bg-emerald-600 hover:scale-110 transition-all border border-white/10">✌️</button>
             </div>
         </div>
     </div>
 
     <div class="grid grid-cols-2 gap-4 p-6 bg-slate-950/50 border-b border-white/5">
         <div id="team-0-box" class="team-box border-l-4 border-l-rose-500">
-            <span class="text-[9px] font-game text-rose-400">SCARLET STRIKERS</span>
+            <span class="text-[9px] font-game text-rose-400/80">SCARLET STRIKERS</span>
             <div id="team-0-score" class="text-4xl font-game font-black text-white">00</div>
             <div id="team-0-ammo" class="text-[10px] font-mono text-slate-500 mt-1">AMMO: 5</div>
         </div>
         <div id="team-1-box" class="team-box border-l-4 border-l-cyan-500">
-            <span class="text-[9px] font-game text-cyan-400">AZURE PHANTOM (AI)</span>
+            <div class="flex justify-between">
+                <span class="text-[9px] font-game text-cyan-400/80">AZURE PHANTOM (AI)</span>
+            </div>
             <div id="team-1-score" class="text-4xl font-game font-black text-white">00</div>
             <div id="team-1-ammo" class="text-[10px] font-mono text-slate-500 mt-1">AMMO: 5</div>
         </div>
@@ -63,7 +87,7 @@
 
     <div id="table-wrapper">
         <div id="canvas-container"></div>
-        <div id="ai-status" class="absolute top-10 left-1/2 -translate-x-1/2 bg-emerald-500 text-black px-6 py-2 rounded-full text-xs font-black font-game opacity-0 transition-all z-50">AI THINKING...</div>
+        <div id="ai-status" class="absolute top-10 left-1/2 -translate-x-1/2 bg-emerald-500 text-black px-6 py-2 rounded-full text-xs font-black font-game opacity-0 transition-all shadow-[0_0_20px_rgba(16,185,129,0.5)] z-50">AI THINKING...</div>
         <div id="power-meter"><div id="power-fill"></div></div>
     </div>
 
@@ -83,8 +107,8 @@
 
     const engine = Engine.create();
     engine.gravity.scale = 0;
-    engine.velocityIterations = 80;
-    engine.positionIterations = 80;
+    engine.velocityIterations = 100;
+    engine.positionIterations = 100;
 
     const container = document.getElementById('canvas-container');
     const tableH = Math.min(window.innerHeight * 0.52, 600);
@@ -98,15 +122,18 @@
         options: { width: tableW, height: tableH, wireframes: false, background: 'transparent' }
     });
 
+    // 狀態變數
     let balls = [], activeBall = null, gameState = 'CONFIG', turnIdx = 0;
-    let currentStrikerIdx = 0; // 核心：鎖定擊球瞬間的發動者
+    let currentStrikerIdx = 0; // 鎖定進球者
     let teamData = [{score:0, ammo:5}, {score:0, ammo:5}];
-    let dragStart = null, currentPt = null, bestBall = null;
+    window.showGuide = true; window.showPower = true;
+    let dragStart = null, currentPt = null, winningBall = null;
 
     function buildTable() {
         Composite.clear(engine.world);
         const wallOpt = { isStatic: true, restitution: 0.8, friction: 0.05, render: { fillStyle: '#1e293b' } };
-        const th = 300;
+        const th = 300; 
+
         Composite.add(engine.world, [
             Bodies.rectangle(tableW/2, -th/2, tableW, th, wallOpt),
             Bodies.rectangle(tableW/2, tableH + th/2, tableW, th, wallOpt),
@@ -139,7 +166,7 @@
         const choices = ['rock', 'paper', 'scissors'];
         const aiChoice = choices[Math.floor(Math.random() * 3)];
         document.getElementById('rps-ui').classList.add('hidden');
-        if (playerChoice === aiChoice) { document.getElementById('rps-ui').classList.remove('hidden'); return; }
+        if (playerChoice === aiChoice) { alert(`平手！重新選擇`); document.getElementById('rps-ui').classList.remove('hidden'); return; }
         const winMap = { rock: 'scissors', paper: 'rock', scissors: 'paper' };
         turnIdx = (winMap[playerChoice] === aiChoice) ? 0 : 1;
         startGame();
@@ -168,21 +195,36 @@
     function aiTurn() {
         if (gameState !== 'IDLE') return;
         spawnNew();
-        document.getElementById('ai-status').style.opacity = 1;
+        const status = document.getElementById('ai-status');
+        status.style.opacity = 1;
+
         setTimeout(() => {
-            const others = balls.filter(b => b !== activeBall);
-            const target = others[Math.floor(Math.random() * others.length)];
+            let target = null, power = 0.013;
+            const otherBalls = balls.filter(b => b !== activeBall);
+            const playerBalls = otherBalls.filter(b => b.label === 'TEAM_0');
+            
+            if (playerBalls.length > 0) {
+                playerBalls.sort((a,b) => a.position.y - b.position.y);
+                target = playerBalls[0];
+            } else {
+                target = otherBalls.find(b => b.label.includes('BONUS')) || {position: {x: tableW/2, y: 50}};
+            }
+
             const angle = Vector.angle(activeBall.position, target.position);
-            launch(Vector.mult({ x: Math.cos(angle), y: Math.sin(angle) }, 0.015));
-            document.getElementById('ai-status').style.opacity = 0;
-            teamData[1].ammo--;
-            updateUI();
+            setTimeout(() => {
+                launch(Vector.mult({ x: Math.cos(angle), y: Math.sin(angle) }, power));
+                status.style.opacity = 0;
+                teamData[1].ammo--;
+                updateUI();
+            }, 1000);
         }, 1200);
     }
 
     function launch(f) {
-        currentStrikerIdx = turnIdx; // 鎖定這波進球算誰的
-        Body.applyForce(activeBall, activeBall.position, f);
+        currentStrikerIdx = turnIdx; // 鎖定這桿是誰打的
+        const maxForce = 0.025;
+        const finalF = Vector.magnitude(f) > maxForce ? Vector.mult(Vector.normalise(f), maxForce) : f;
+        Body.applyForce(activeBall, activeBall.position, finalF);
         gameState = 'MOVING';
         checkStop();
     }
@@ -198,48 +240,49 @@
 
     function processTurn() {
         const totalAmmo = teamData[0].ammo + teamData[1].ammo;
+        
         if (totalAmmo === 0) {
-            // 回合終結判定：最靠近底線（頂部）
+            // 結局判定：尋找最靠近底線（頂部）的球
             let minY = Infinity;
-            let roundWinner = -1;
-            bestBall = null;
+            let winnerIdx = -1;
+            winningBall = null;
 
             balls.forEach(b => {
                 if (b.label.includes('TEAM_') && b.position.y < minY) {
                     minY = b.position.y;
-                    bestBall = b;
-                    roundWinner = parseInt(b.label.split('_')[1]);
+                    winningBall = b;
+                    winnerIdx = parseInt(b.label.split('_')[1]);
                 }
             });
 
-            if (roundWinner >= 0) {
-                teamData[roundWinner].score += 75;
+            if (winnerIdx >= 0) {
+                teamData[winnerIdx].score += 75;
                 updateUI();
-                alert(`ROUND OVER! ${roundWinner === 0 ? 'SCARLET' : 'AZURE'} wins the 75pt Line Bonus!`);
+                alert(`本局結束！ ${winnerIdx === 0 ? 'SCARLET' : 'AZURE'} 贏得 75 分底線加分！`);
             }
             return;
         }
 
         turnIdx = (turnIdx + 1) % 2;
         if (teamData[turnIdx].ammo <= 0) turnIdx = (turnIdx + 1) % 2;
+        
         gameState = 'IDLE';
         updateUI();
         document.getElementById('main-btn').innerText = "DEPO BALL";
         if (turnIdx === 1) aiTurn();
     }
 
-    // 核心計分邏輯修正
+    // 計分偵測
     Events.on(engine, 'afterUpdate', () => {
         balls.forEach((b, idx) => {
             const inPocket = (b.position.y < 20 || b.position.y > tableH - 20 || (b.position.y > tableH/2 - 20 && b.position.y < tableH/2 + 20)) && (b.position.x < 20 || b.position.x > tableW - 20);
             
             if (inPocket) {
-                // 擊球者得分邏輯
                 if (b.label.includes('TEAM_')) {
                     const owner = parseInt(b.label.split('_')[1]);
-                    if (owner !== currentStrikerIdx) teamData[currentStrikerIdx].score += 25; // 擊落對手球
+                    if (owner !== currentStrikerIdx) teamData[currentStrikerIdx].score += 25;
                 } else if (b.label.includes('BONUS')) {
-                    teamData[currentStrikerIdx].score += 50; // 擊落黑白球
+                    teamData[currentStrikerIdx].score += 50;
                 }
                 Composite.remove(engine.world, b);
                 balls.splice(idx, 1);
@@ -248,29 +291,35 @@
         });
     });
 
+    // 繪製
     Events.on(render, 'afterRender', () => {
         const ctx = render.context;
-        // 繪製三角形標記
-        ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+        // 發球線
+        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(0, tableH * 0.7); ctx.lineTo(tableW, tableH * 0.7); ctx.stroke();
+        
+        // 三角加分區
         ctx.setLineDash([10, 5]);
+        ctx.strokeStyle = 'rgba(255,255,255,0.1)';
         ctx.beginPath();
         ctx.moveTo(tableW/2, tableH * 0.05); ctx.lineTo(tableW * 0.2, tableH * 0.3); ctx.lineTo(tableW * 0.8, tableH * 0.3); ctx.closePath();
         ctx.stroke();
         ctx.setLineDash([]);
 
-        // 底線判定標記 (最後一球)
-        if (bestBall) {
+        // 最靠近球標記
+        if (winningBall) {
             ctx.strokeStyle = '#fbbf24';
-            ctx.lineWidth = 4;
+            ctx.lineWidth = 3;
             ctx.beginPath();
-            ctx.arc(bestBall.position.x, bestBall.position.y, ballR * 2.5, 0, Math.PI * 2);
+            ctx.arc(winningBall.position.x, winningBall.position.y, ballR * 2, 0, Math.PI * 2);
             ctx.stroke();
             ctx.fillStyle = 'rgba(251, 191, 36, 0.2)';
             ctx.fill();
         }
 
-        // 玩家擊球線
-        if (gameState === 'READY' && dragStart && currentPt) {
+        // 瞄準線
+        if (gameState === 'READY' && dragStart && currentPt && window.showGuide) {
             const dx = dragStart.x - currentPt.x, dy = dragStart.y - currentPt.y;
             ctx.strokeStyle = '#10b981';
             ctx.lineWidth = 3;
@@ -279,20 +328,21 @@
         }
     });
 
+    // 觸控
     container.addEventListener('touchstart', (e) => {
         if (turnIdx !== 0 || gameState !== 'READY') return;
         const rect = container.getBoundingClientRect();
         dragStart = { x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top };
-        document.getElementById('power-meter').style.display = 'block';
+        if(window.showPower) document.getElementById('power-meter').style.display = 'block';
     });
 
     container.addEventListener('touchmove', (e) => {
         const rect = container.getBoundingClientRect();
         currentPt = { x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top };
         if (gameState === 'SPAWNED' && currentPt.y > tableH * 0.7) Body.setPosition(activeBall, currentPt);
-        if (dragStart && currentPt) {
+        if (dragStart && currentPt && window.showPower) {
             const dist = Vector.magnitude(Vector.sub(dragStart, currentPt));
-            document.getElementById('power-fill').style.width = Math.min(100, (dist/150)*100) + '%';
+            document.getElementById('power-fill').style.width = Math.min(100, (dist / 150) * 100) + '%';
         }
         e.preventDefault();
     }, { passive: false });
@@ -320,6 +370,7 @@
     });
 
     function spawnNew() {
+        winningBall = null; // 重置加分球顯示
         activeBall = createBall(tableW/2, tableH * 0.85, turnIdx===0?'#f43f5e':'#06b6d4', `TEAM_${turnIdx}`);
         gameState = 'SPAWNED';
         document.getElementById('main-btn').innerText = "LOCK POS";

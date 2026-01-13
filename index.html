@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Grand Master Billiards v19.0 - Gentle AI</title>
+    <title>Grand Master Billiards v19.1 - Fix Touch Setup</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -11,7 +11,7 @@
         body { margin: 0; background: #020617; color: #f8fafc; position: fixed; width: 100%; height: 100%; overflow: hidden; font-family: 'system-ui'; }
         #app { display: flex; flex-direction: column; height: 100%; }
         #table-wrapper { flex: 1; display: flex; justify-content: center; align-items: center; background: radial-gradient(circle, #0f172a 0%, #020617 100%); position: relative; padding: 10px; }
-        #canvas-container { position: relative; border: 12px solid #3f1a01; border-radius: 24px; box-shadow: 0 0 50px rgba(0,0,0,0.5); background: #064e3b; }
+        #canvas-container { position: relative; border: 12px solid #3f1a01; border-radius: 24px; box-shadow: 0 0 50px rgba(0,0,0,0.5); background: #064e3b; touch-action: none; }
         .team-box { background: rgba(30, 41, 59, 0.7); padding: 12px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.1); }
         .active-turn { border-color: #10b981 !important; background: rgba(16, 185, 129, 0.1); box-shadow: 0 0 15px rgba(16,185,129,0.3); }
         .pocket-hole { position: absolute; background: #000; border-radius: 50%; z-index: 1; box-shadow: inset 0 4px 8px rgba(0,0,0,0.8); border: 1px solid #333; pointer-events: none; }
@@ -129,13 +129,13 @@
         return b;
     }
 
-    // 擺球監聽
-    container.addEventListener('mousedown', (e) => {
+    // --- 修改處：統一處理擺球點擊與觸摸 ---
+    function handleSetupPoint(clientX, clientY) {
         if (gameState !== 'SETUP_BONUS') return;
         const r = container.getBoundingClientRect();
-        const x = e.clientX - r.left, y = e.clientY - r.top;
+        const x = clientX - r.left, y = clientY - r.top;
         
-        // 判定是否在三角形內
+        // 判定是否在倒三角形內
         const withinTri = y >= triTop && y <= triBottom && 
                           x >= (tableW/2 - (triWidth/2 * (triBottom-y)/(triBottom-triTop))) &&
                           x <= (tableW/2 + (triWidth/2 * (triBottom-y)/(triBottom-triTop)));
@@ -145,11 +145,26 @@
             createBall(x, y, colors[bonusCount], 'BONUS');
             bonusCount++;
             if (bonusCount === 3) {
-                gameState = 'RPS';
-                document.getElementById('rps-ui').classList.remove('hidden');
+                setTimeout(() => {
+                    gameState = 'RPS';
+                    document.getElementById('rps-ui').classList.remove('hidden');
+                }, 500);
             }
         }
-    });
+    }
+
+    container.addEventListener('mousedown', (e) => handleSetupPoint(e.clientX, e.clientY));
+    container.addEventListener('touchstart', (e) => {
+        // 如果是在擺球階段，則處理擺球；如果是 READY 階段，則處理擊球
+        if (gameState === 'SETUP_BONUS') {
+            handleSetupPoint(e.touches[0].clientX, e.touches[0].clientY);
+            e.preventDefault();
+        } else if (gameState === 'READY' && turnIdx === 0) {
+            const r = container.getBoundingClientRect();
+            dragStart = { x: e.touches[0].clientX - r.left, y: e.touches[0].clientY - r.top };
+            document.getElementById('power-meter').style.display = 'block';
+        }
+    }, { passive: false });
 
     function playRPS(p) {
         const a = ['rock', 'paper', 'scissors'][Math.floor(Math.random() * 3)];
@@ -175,7 +190,6 @@
         await new Promise(r => setTimeout(r, 800));
         
         const vec = Vector.sub(target.position, activeBall.position);
-        // *** AI 力道控制：大幅削減，模擬 1cm 輕推 ***
         const gentleness = 0.00006; 
         const dist = Math.min(Vector.magnitude(vec), 100);
         launch(Vector.mult(Vector.normalise(vec), dist * gentleness));
@@ -215,11 +229,8 @@
         document.getElementById('instruction').innerText = turnIdx === 0 ? "Your Turn" : "AI Thinking";
     }
 
-    // 核心繪圖邏輯：確保標線不消失
     Events.on(render, 'afterRender', () => {
         const ctx = render.context;
-        
-        // 1. 倒三角形 (擺球區)
         if (gameState === 'SETUP_BONUS') {
             ctx.setLineDash([4, 4]); ctx.strokeStyle = '#10b981'; ctx.lineWidth = 1;
             ctx.beginPath();
@@ -228,12 +239,9 @@
             ctx.lineTo(tableW/2, triBottom);
             ctx.closePath(); ctx.stroke(); ctx.setLineDash([]);
         }
-
-        // 2. 開球線
         ctx.strokeStyle = 'rgba(255,255,255,0.15)'; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(0, tableH * 0.7); ctx.lineTo(tableW, tableH * 0.7); ctx.stroke();
 
-        // 3. 玩家瞄準線
         if (gameState === 'READY' && dragStart && currentPt && activeBall) {
             const dx = dragStart.x - currentPt.x, dy = dragStart.y - currentPt.y;
             ctx.strokeStyle = '#10b981'; ctx.lineWidth = 2;
@@ -242,8 +250,6 @@
             ctx.lineTo(activeBall.position.x + dx * 5, activeBall.position.y + dy * 5);
             ctx.stroke();
         }
-
-        // 4. AI 瞄準線
         if (aiThinkLine) {
             ctx.strokeStyle = 'rgba(6, 182, 212, 0.5)'; ctx.lineWidth = 2;
             ctx.beginPath();
@@ -253,7 +259,6 @@
         }
     });
 
-    // 進袋偵測
     Events.on(engine, 'afterUpdate', () => {
         balls.forEach((b, idx) => {
             const p = b.position;
@@ -263,14 +268,6 @@
                 Composite.remove(engine.world, b); balls.splice(idx, 1); updateUI();
             }
         });
-    });
-
-    // 手勢操作
-    container.addEventListener('touchstart', (e) => {
-        if (gameState !== 'READY' || turnIdx !== 0) return;
-        const r = container.getBoundingClientRect();
-        dragStart = { x: e.touches[0].clientX - r.left, y: e.touches[0].clientY - r.top };
-        document.getElementById('power-meter').style.display = 'block';
     });
 
     container.addEventListener('touchmove', (e) => {
@@ -310,3 +307,4 @@
 </script>
 </body>
 </html>
+

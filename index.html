@@ -3,46 +3,41 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Billiard Pro v11 - Resource Management</title>
+    <title>Billiard Strategy Pro v12</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { margin: 0; background: #020617; color: #f8fafc; position: fixed; width: 100%; height: 100%; overflow: hidden; font-family: system-ui, -apple-system; }
+        body { margin: 0; background: #020617; color: #f8fafc; position: fixed; width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI', system-ui; }
         #app { display: flex; flex-direction: column; height: 100%; }
         #table-wrapper { flex: 1; display: flex; justify-content: center; align-items: center; background: radial-gradient(circle, #0f172a 0%, #000 100%); position: relative; }
-        #canvas-container { position: relative; border-radius: 12px; overflow: hidden; box-shadow: 0 0 60px rgba(0,0,0,0.5); }
-        .config-overlay { position: absolute; inset: 0; background: rgba(7, 10, 19, 0.98); z-index: 2000; display: flex; flex-direction: column; align-items: center; justify-content: center; backdrop-filter: blur(15px); }
-        .score-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; padding: 12px; background: #0f172a; border-bottom: 2px solid #1e293b; }
-        .team-status { background: #1e293b; padding: 8px; border-radius: 12px; border-bottom: 3px solid transparent; }
-        .pocket-hole { position: absolute; border-radius: 50%; background: #000; box-shadow: inset 0 0 15px rgba(255,255,255,0.1); pointer-events: none; z-index: 1; }
+        #canvas-container { position: relative; border: 4px solid #334155; border-radius: 16px; overflow: hidden; background: #064e3b; }
+        .config-overlay { position: absolute; inset: 0; background: rgba(7, 10, 19, 0.98); z-index: 2000; display: flex; flex-direction: column; align-items: center; justify-content: center; backdrop-filter: blur(20px); }
+        .score-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; padding: 10px; background: #0f172a; border-bottom: 2px solid #1e293b; }
+        .team-card { background: #1e293b; padding: 10px; border-radius: 12px; border-left: 5px solid transparent; transition: all 0.3s; }
+        .active-turn { box-shadow: 0 0 15px rgba(16, 185, 129, 0.4); border-color: #10b981 !important; transform: scale(1.02); }
+        .pocket-void { position: absolute; background: #000; border-radius: 50%; box-shadow: inset 0 0 20px rgba(255,255,255,0.05); z-index: 1; pointer-events: none; }
     </style>
 </head>
 <body>
 
 <div id="app">
     <div id="config-ui" class="config-overlay">
-        <div class="bg-slate-900 p-8 rounded-[2rem] border border-slate-700 shadow-2xl w-80">
-            <h1 class="text-2xl font-black text-emerald-400 mb-6 text-center italic tracking-tighter uppercase">Tournament v11</h1>
+        <div class="bg-slate-900 p-8 rounded-[2.5rem] border border-slate-700 w-80 shadow-2xl">
+            <h1 class="text-2xl font-black text-emerald-400 mb-6 text-center italic tracking-widest">STRATEGY v12</h1>
             <div class="space-y-4">
                 <div>
                     <label class="text-[10px] text-slate-500 font-bold uppercase">參賽隊伍</label>
-                    <select id="team-count" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm mt-1 outline-none">
-                        <option value="2">2 隊對抗</option>
-                        <option value="3">3 隊大亂鬥</option>
-                        <option value="4">4 隊巔峰賽</option>
+                    <select id="team-count" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm mt-1">
+                        <option value="2">個人 vs AI</option>
+                        <option value="3">三人混戰 (含 AI)</option>
+                        <option value="4">四方爭霸 (含 AI)</option>
                     </select>
                 </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="text-[10px] text-slate-500 font-bold uppercase">總球數/隊</label>
-                        <input type="number" id="ball-qty" value="5" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm mt-1 text-center">
-                    </div>
-                    <div>
-                        <label class="text-[10px] text-slate-500 font-bold uppercase">加分球(局)</label>
-                        <input type="number" id="black-qty" value="2" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm mt-1 text-center">
-                    </div>
+                <div>
+                    <label class="text-[10px] text-slate-500 font-bold uppercase">每局發球數</label>
+                    <input type="number" id="ball-qty" value="5" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm mt-1 text-center">
                 </div>
-                <button id="start-btn" class="w-full bg-emerald-600 hover:bg-emerald-500 py-4 rounded-2xl font-black text-lg mt-2 shadow-lg transition-all">開局啟動</button>
+                <button id="start-btn" class="w-full bg-emerald-600 hover:bg-emerald-500 py-4 rounded-2xl font-black text-lg shadow-lg">進入球局</button>
             </div>
         </div>
     </div>
@@ -51,31 +46,26 @@
 
     <div id="table-wrapper">
         <div id="canvas-container"></div>
-        <div id="prox-alert" class="absolute top-4 left-1/2 -translate-x-1/2 bg-black/60 px-4 py-1 rounded-full border border-white/10 text-[10px] text-emerald-400 z-10 font-mono"></div>
+        <div id="bonus-tag" class="absolute top-4 left-4 bg-emerald-500/20 px-3 py-1 rounded-full border border-emerald-500/30 text-[10px] text-emerald-400 font-mono"></div>
     </div>
 
     <div class="bg-slate-900 p-4 flex flex-col gap-3 border-t border-slate-800">
-        <div class="flex justify-between items-center text-[10px] font-bold uppercase text-slate-500">
-            <span id="game-info" class="text-yellow-500">準備開球</span>
-            <label class="flex items-center gap-1 cursor-pointer">
-                <input type="checkbox" id="ai-fast" checked> AI 瞬間擊球
-            </label>
+        <div class="flex justify-between items-center text-[10px] font-bold">
+            <span id="turn-msg" class="text-yellow-500">準備開球</span>
+            <span class="text-slate-500 uppercase">底線獎勵: 75分 | 黑/白球: 50/100分</span>
         </div>
         <div class="flex gap-2">
             <button id="undo-btn" class="bg-slate-800 px-6 rounded-2xl font-bold text-[10px] opacity-30" disabled>UNDO</button>
-            <button id="main-btn" class="flex-1 bg-emerald-600 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl">開始發球</button>
+            <button id="main-btn" class="flex-1 bg-emerald-600 py-4 rounded-2xl font-black text-xs uppercase tracking-widest">發球佈置</button>
         </div>
     </div>
 </div>
 
 <script>
-    /** * Billiard Elite v11 
-     * 重點：Ammo 消耗系統、中袋邊界開洞、力道擬人化 
-     */
     const { Engine, Render, Runner, Bodies, Composite, Events, Vector, Body } = Matter;
 
     const engine = Engine.create();
-    engine.velocityIterations = 15;
+    engine.velocityIterations = 20;
     engine.gravity.y = 0;
 
     const container = document.getElementById('canvas-container');
@@ -83,7 +73,7 @@
     const tableW = tableH / 2;
     const scale = tableW / 137;
     const ballR = (5.7 * scale) / 2.3;
-    const pkSize = ballR * 2.1;
+    const pkSize = ballR * 2.2;
     const colors = ['#f43f5e', '#3b82f6', '#eab308', '#a855f7'];
 
     const render = Render.create({
@@ -92,73 +82,67 @@
     });
 
     let balls = [], activeBall = null, gameState = 'CONFIG', turnIdx = 0, strikerIdx = 0;
-    let cfg = { teamCount: 2, ballQty: 5, blackQty: 2 };
-    let teamData = []; // 存儲得分與剩餘球數
+    let cfg = { teamCount: 2, ballQty: 5 };
+    let teamData = [];
+    let bonusInARow = 0; // 同一桿進加分球的計數
 
-    // --- 1. 真實物理邊界：六袋口開洞 ---
+    // --- 1. 真實物理結構：邊界開洞 ---
     function buildCushions() {
         Composite.clear(engine.world);
-        const opt = { isStatic: true, restitution: 0.85, friction: 0.02, render: { fillStyle: '#1e293b' } };
-        const th = 100; // 牆厚
-        const g = pkSize * 1.5; // 洞口間隙
+        const opt = { isStatic: true, restitution: 0.8, friction: 0.02, render: { fillStyle: '#1e293b' } };
+        const th = 100, g = pkSize * 1.4;
 
-        const walls = [
+        Composite.add(engine.world, [
             // 頂邊兩段
-            Bodies.rectangle(tableW/4, -th/2, tableW/2 - g, th, opt),
-            Bodies.rectangle(tableW*0.75, -th/2, tableW/2 - g, th, opt),
+            Bodies.rectangle(tableW*0.25, -th/2, tableW*0.5-g, th, opt),
+            Bodies.rectangle(tableW*0.75, -th/2, tableW*0.5-g, th, opt),
             // 底邊兩段
-            Bodies.rectangle(tableW/4, tableH + th/2, tableW/2 - g, th, opt),
-            Bodies.rectangle(tableW*0.75, tableH + th/2, tableW/2 - g, th, opt),
-            // 左側三段 (中袋開洞)
-            Bodies.rectangle(-th/2, tableH*0.18, th, tableH*0.36 - g, opt),
-            Bodies.rectangle(-th/2, tableH/2, th, g, { ...opt, isSensor: true, render: { opacity: 0 } }), // 中袋感應區
-            Bodies.rectangle(-th/2, tableH*0.82, th, tableH*0.36 - g, opt),
-            // 右側三段
-            Bodies.rectangle(tableW + th/2, tableH*0.18, th, tableH*0.36 - g, opt),
-            Bodies.rectangle(tableW + th/2, tableH/2, th, g, { ...opt, isSensor: true, render: { opacity: 0 } }),
-            Bodies.rectangle(tableW + th/2, tableH*0.82, th, tableH*0.36 - g, opt)
-        ];
-        Composite.add(engine.world, walls);
+            Bodies.rectangle(tableW*0.25, tableH+th/2, tableW*0.5-g, th, opt),
+            Bodies.rectangle(tableW*0.75, tableH+th/2, tableW*0.5-g, th, opt),
+            // 左側 (中袋完全空出)
+            Bodies.rectangle(-th/2, tableH*0.2, th, tableH*0.4-g, opt),
+            Bodies.rectangle(-th/2, tableH*0.8, th, tableH*0.4-g, opt),
+            // 右側
+            Bodies.rectangle(tableW+th/2, tableH*0.2, th, tableH*0.4-g, opt),
+            Bodies.rectangle(tableW+th/2, tableH*0.8, th, tableH*0.4-g, opt)
+        ]);
 
-        // 視覺黑洞
         const pks = [{x:0,y:0},{x:tableW,y:0},{x:0,y:tableH/2},{x:tableW,y:tableH/2},{x:0,y:tableH},{x:tableW,y:tableH}];
+        container.querySelectorAll('.pocket-void').forEach(e => e.remove());
         pks.forEach(p => {
             const h = document.createElement('div');
-            h.className = 'pocket-hole';
-            h.style.width = h.style.height = (pkSize * 2.2) + 'px';
-            h.style.left = (p.x - pkSize * 1.1) + 'px';
-            h.style.top = (p.y - pkSize * 1.1) + 'px';
+            h.className = 'pocket-void';
+            h.style.width = h.style.height = (pkSize * 2.3) + 'px';
+            h.style.left = (p.x - pkSize * 1.15) + 'px';
+            h.style.top = (p.y - pkSize * 1.15) + 'px';
             container.appendChild(h);
         });
     }
 
-    // --- 2. 初始化局數 ---
-    function initTournament() {
+    // --- 2. 初始化對局 ---
+    function initRound() {
         buildCushions();
         teamData = Array.from({length: cfg.teamCount}, () => ({ score: 0, ammo: cfg.ballQty }));
         updateUI();
-
-        // 放置本局黑球
+        
+        // 放置中立加分球
         const triY = tableH * 0.2;
-        for(let i=0; i<cfg.blackQty; i++) {
-            balls.push(createBall(tableW/2, triY + i*25, '#111', 'BLACK', '#fbbf24'));
-        }
-        balls.push(createBall(tableW/2, triY + (cfg.blackQty*25)+20, '#fff', 'WHITE', '#94a3b8'));
+        balls.push(createBall(tableW/2, triY, '#111', 'BONUS_B', '#fbbf24')); // 黑球
+        balls.push(createBall(tableW/2, triY + 30, '#fff', 'BONUS_W', '#94a3b8')); // 母球
         
         gameState = 'SETTING';
-        document.getElementById('game-info').innerText = "佈置模式";
     }
 
     function createBall(x, y, color, label, stroke) {
         const b = Bodies.circle(x, y, ballR, {
-            label, restitution: 0.9, frictionAir: 0.015,
+            label, restitution: 0.9, frictionAir: 0.018,
             render: { fillStyle: color, strokeStyle: stroke, lineWidth: 2.5 }
         });
         Composite.add(engine.world, b);
         return b;
     }
 
-    // --- 3. 擊球力道與 Ammo 邏輯 ---
+    // --- 3. 擊球力道與流程 ---
     let dragStart = null, currentMouse = null;
 
     container.addEventListener('touchstart', (e) => {
@@ -166,7 +150,7 @@
         const pt = { x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top };
         balls.forEach(b => {
             if (Vector.magnitude(Vector.sub(b.position, pt)) < 30) {
-                if (gameState === 'SETTING' && (b.label === 'BLACK' || b.label === 'WHITE')) activeBall = b;
+                if (gameState === 'SETTING' && b.label.includes('BONUS')) activeBall = b;
                 if (gameState === 'SPAWNED' && b === activeBall) activeBall = b;
                 if (gameState === 'READY' && b === activeBall) { dragStart = pt; currentMouse = pt; }
             }
@@ -178,79 +162,88 @@
         const pt = { x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top };
         currentMouse = pt;
         if (activeBall && gameState === 'SETTING') Body.setPosition(activeBall, pt);
-        if (activeBall && gameState === 'SPAWNED' && pt.y > tableH * 0.72) Body.setPosition(activeBall, pt);
+        if (activeBall && gameState === 'SPAWNED' && pt.y > tableH * 0.7) Body.setPosition(activeBall, pt);
         e.preventDefault();
     }, { passive: false });
 
     container.addEventListener('touchend', () => {
         if (gameState === 'READY' && dragStart && currentMouse) {
-            // 優化力道判斷：增加最大閾值
-            const rawDist = Vector.magnitude(Vector.sub(dragStart, currentMouse));
-            const power = Math.min(rawDist * 0.0001, 0.022); // 限制在 0.022 以下，防止穿牆
+            const dist = Vector.magnitude(Vector.sub(dragStart, currentMouse));
+            const power = Math.min(dist * 0.00008, 0.018); // 優化力道感
             const dir = Vector.normalise(Vector.sub(dragStart, currentMouse));
             
-            if (power > 0.003) {
+            if (power > 0.002) {
                 strikerIdx = turnIdx;
-                teamData[turnIdx].ammo--; // 擊球即消耗彈藥
-                updateUI();
+                bonusInARow = 0; // 重置本桿連進計數
+                teamData[turnIdx].ammo--;
                 launch(Vector.mult(dir, power));
             }
         }
         dragStart = null;
     });
 
-    function launch(force) {
-        Body.applyForce(activeBall, activeBall.position, force);
+    function launch(f) {
+        Body.applyForce(activeBall, activeBall.position, f);
         gameState = 'MOVING';
-        document.getElementById('game-info').innerText = "球運行中...";
+        document.getElementById('turn-msg').innerText = "運算中...";
         checkStop();
     }
 
     function checkStop() {
-        const check = setInterval(() => {
+        const timer = setInterval(() => {
             if (balls.every(b => b.speed < 0.15)) {
-                clearInterval(check);
-                onTurnEnd();
+                clearInterval(timer);
+                endTurn();
             }
         }, 600);
     }
 
-    function onTurnEnd() {
-        findLead();
-        // 尋找下一個還有球的隊伍
-        let nextIdx = (turnIdx + 1) % cfg.teamCount;
-        let attempts = 0;
-        while(teamData[nextIdx].ammo <= 0 && attempts < cfg.teamCount) {
-            nextIdx = (nextIdx + 1) % cfg.teamCount;
-            attempts++;
-        }
+    function endTurn() {
+        // 判定底線獎勵
+        let minVal = Infinity, leadTeam = -1;
+        balls.forEach(b => {
+            if (b.position.y < minVal) {
+                minVal = b.position.y;
+                if (b.label.includes('TEAM_')) leadTeam = parseInt(b.label.split('_')[1]);
+            }
+        });
+        document.getElementById('bonus-tag').innerText = leadTeam >= 0 ? `底線領先: TEAM ${String.fromCharCode(65+leadTeam)} (+75)` : "--";
 
-        if (attempts >= cfg.teamCount && teamData.every(t => t.ammo <= 0)) {
-            document.getElementById('game-info').innerText = "比賽結束！";
+        // 下一回合
+        let next = (turnIdx + 1) % cfg.teamCount;
+        if (teamData.every(t => t.ammo <= 0)) {
+            // 結算底線獎勵
+            if (leadTeam >= 0) teamData[leadTeam].score += 75;
+            updateUI();
+            document.getElementById('turn-msg').innerText = "局終結算";
             return;
         }
-
-        turnIdx = nextIdx;
-        gameState = 'IDLE';
-        document.getElementById('game-info').innerText = `輪到 Team ${String.fromCharCode(65+turnIdx)}`;
-        document.getElementById('main-btn').innerText = `隊伍 ${String.fromCharCode(65+turnIdx)} 發球`;
+        while(teamData[next].ammo <= 0) next = (next + 1) % cfg.teamCount;
         
-        if (turnIdx > 0 && document.getElementById('ai-fast').checked) setTimeout(aiThink, 1000);
+        turnIdx = next;
+        gameState = 'IDLE';
+        document.getElementById('turn-msg').innerText = `輪到 Team ${String.fromCharCode(65+turnIdx)}`;
+        document.getElementById('main-btn').innerText = `TEAM ${String.fromCharCode(65+turnIdx)} 發球`;
+        updateUI();
+
+        if (turnIdx > 0) setTimeout(aiStrategy, 1000); // 電腦 AI 思考
     }
 
-    // --- 4. 進球規則與桌面判定 ---
+    // --- 4. 進球規則與獨立計分 ---
     Events.on(engine, 'afterUpdate', () => {
         balls.forEach((b, idx) => {
-            // 物理邊界外即為進球
             if (b.position.x < -15 || b.position.x > tableW + 15 || b.position.y < -15 || b.position.y > tableH + 15) {
                 const label = b.label;
-                // 規則：進對手球加分，進黑球全場加分
-                if (label.includes('TEAM') && label !== `TEAM_${strikerIdx}`) {
-                    teamData[strikerIdx].score++;
-                } else if (label === 'BLACK') {
-                    teamData[strikerIdx].score += 3; // 黑球大加分
+                const striker = teamData[strikerIdx];
+
+                if (label.includes('TEAM_')) {
+                    const victimIdx = parseInt(label.split('_')[1]);
+                    if (victimIdx !== strikerIdx) striker.score += 25; // 進對手球 25 分
+                } else if (label.includes('BONUS')) {
+                    bonusInARow++;
+                    striker.score += (bonusInARow === 1) ? 50 : 100; // 第一顆 50，第二顆 100
                 }
-                
+
                 Composite.remove(engine.world, b);
                 balls.splice(idx, 1);
                 updateUI();
@@ -263,47 +256,42 @@
         sb.innerHTML = '';
         teamData.forEach((t, i) => {
             sb.innerHTML += `
-                <div class="team-status" style="border-color: ${colors[i]}">
-                    <div class="flex justify-between items-center mb-1">
-                        <span class="text-[9px] font-black text-slate-400">TEAM ${String.fromCharCode(65+i)}</span>
-                        <span class="text-[9px] bg-slate-700 px-2 rounded-full">Ammo: ${t.ammo}</span>
+                <div class="team-card ${turnIdx===i?'active-turn':''}" style="border-left-color: ${colors[i]}">
+                    <div class="flex justify-between text-[10px] font-black opacity-60 uppercase">
+                        <span>Team ${String.fromCharCode(65+i)} ${i>0?'(AI)':''}</span>
+                        <span>Ammo: ${t.ammo}</span>
                     </div>
-                    <div class="text-xl font-black" style="color: ${colors[i]}">${t.score}</div>
+                    <div class="text-2xl font-black" style="color: ${colors[i]}">${t.score} <span class="text-[10px]">pts</span></div>
                 </div>`;
         });
     }
 
-    // --- 5. AI 與功能控制 ---
-    function aiThink() {
+    // --- 5. 競爭型 AI (不是重複玩家，而是尋找最佳路徑) ---
+    function aiStrategy() {
         spawnNew();
         setTimeout(() => {
             gameState = 'READY';
-            const target = balls.find(b => b.label === 'BLACK' || (b.label.includes('TEAM') && b.label !== `TEAM_${turnIdx}`)) || balls[0];
+            // AI 邏輯：優先瞄準對手的球（獲取 25 分）或 加分球（獲取 50 分）
+            const targets = balls.filter(b => b.label !== `TEAM_${turnIdx}` && b !== activeBall);
+            const target = targets.sort((a,b) => Vector.magnitude(Vector.sub(a.position, activeBall.position)) - Vector.magnitude(Vector.sub(b.position, activeBall.position)))[0] || balls[0];
+            
             const dir = Vector.normalise(Vector.sub(target.position, activeBall.position));
             strikerIdx = turnIdx;
             teamData[turnIdx].ammo--;
-            updateUI();
-            launch(Vector.mult(dir, 0.012 + Math.random()*0.005));
-        }, 1200);
+            launch(Vector.mult(dir, 0.012 + Math.random()*0.003));
+        }, 1500);
     }
 
     document.getElementById('start-btn').addEventListener('click', () => {
-        cfg = { 
-            teamCount: parseInt(document.getElementById('team-count').value),
-            ballQty: parseInt(document.getElementById('ball-qty').value),
-            blackQty: parseInt(document.getElementById('black-qty').value)
-        };
+        cfg = { teamCount: parseInt(document.getElementById('team-count').value), ballQty: parseInt(document.getElementById('ball-qty').value) };
         document.getElementById('config-ui').classList.add('hidden');
-        initTournament();
+        initRound();
     });
 
     document.getElementById('main-btn').addEventListener('click', () => {
         if (gameState === 'SETTING') { gameState = 'IDLE'; document.getElementById('main-btn').innerText = "開球"; }
-        else if (gameState === 'IDLE') {
-            if (teamData[turnIdx].ammo > 0) spawnNew();
-            else onTurnEnd();
-        }
-        else if (gameState === 'SPAWNED') { gameState = 'READY'; document.getElementById('main-btn').innerText = "拉桿擊球"; }
+        else if (gameState === 'IDLE') spawnNew();
+        else if (gameState === 'SPAWNED') { gameState = 'READY'; document.getElementById('main-btn').innerText = "向後拉擊球"; }
     });
 
     function spawnNew() {
@@ -313,30 +301,17 @@
         document.getElementById('main-btn').innerText = "確認位置";
     }
 
-    function findLead() {
-        let minV = Infinity, tag = "--";
-        balls.forEach(b => { if (b.position.y < minV) { minV = b.position.y; tag = b.label; } });
-        document.getElementById('prox-alert').innerText = `最頂端領先: ${tag}`;
-    }
-
-    // 繪圖輔助
     Events.on(render, 'afterRender', () => {
         const ctx = render.context;
-        // 發球線
-        ctx.strokeStyle = 'rgba(255,255,255,0.1)';
-        ctx.beginPath(); ctx.moveTo(0, tableH*0.72); ctx.lineTo(tableW, tableH*0.72); ctx.stroke();
-
-        // 擊球導引線
+        // 發球限制線
+        ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+        ctx.beginPath(); ctx.moveTo(0, tableH*0.7); ctx.lineTo(tableW, tableH*0.7); ctx.stroke();
+        
         if (gameState === 'READY' && dragStart && currentMouse) {
             const dx = dragStart.x - currentMouse.x, dy = dragStart.y - currentMouse.y;
             ctx.beginPath(); ctx.moveTo(activeBall.position.x, activeBall.position.y);
             ctx.lineTo(activeBall.position.x + dx*8, activeBall.position.y + dy*8);
-            ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 1.5; ctx.stroke();
-            
-            // 力度表
-            const p = Math.min(Vector.magnitude({x:dx, y:dy}), 100);
-            ctx.beginPath(); ctx.arc(activeBall.position.x, activeBall.position.y, p, 0, Math.PI*2);
-            ctx.strokeStyle = p > 70 ? '#f43f5e' : '#10b981'; ctx.stroke();
+            ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.lineWidth = 2; ctx.stroke();
         }
     });
 
